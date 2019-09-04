@@ -4,6 +4,7 @@
 
 import numpy as np
 import pandas as pd
+from scipy.stats import wilcoxon, mannwhitneyu, fisher_exact
 import math
 
 #gets stats for our editing sites
@@ -17,7 +18,7 @@ min_autism_people_5_cov = 10 #min autism number of people of 5 coverage you must
 min_normal_people_5_cov = 10 #min normal number of people of 5 coverage you must have if needing to use unstable 5x coverage
 config_file = '../data/config_file'
 editing_file= '../data/editing_sites.txt'
-output_file = '../results/editing_sites.with_stats.txt'
+output_file = '../results/editing_sites.with_stats.csv'
 
 
 #######DONE CANGING PARAMETERS###################
@@ -133,11 +134,45 @@ for i in range(0,edit_level_table.shape[0]):
   stable_normal_prevalence[i] = stable_number_normal_nonzero_editing_and_min_coverage[i]/stable_number_normal_with_at_least_min_coverage[i]
   stable_total_number_individuals_nonzero_editing_and_min_coverage[i] = (stable_number_autism_nonzero_editing_and_min_coverage[i] + stable_number_normal_nonzero_editing_and_min_coverage[i]).sum()
   if (len(autism_adju_edit_row) >=1) & (len(normal_adju_edit_row) >=1):
-    print len(autism_adju_edit_row)
+    if (np.all(autism_adju_edit_row.values == normal_adju_edit_row.values)):
+      stable_mann_whitney_p_value[i] = float('nan')
+    else:
+      temp, stable_mann_whitney_p_value[i] = mannwhitneyu(autism_adju_edit_row,normal_adju_edit_row, alternative='two-sided')
+  else:
+    stable_mann_whitney_p_value[i] = float('nan')
+  stable_editing_level_effect_size[i] =  np.absolute(stable_mean_autism_editing_level[i] - stable_mean_normal_editing_level[i])
+  fisher_matrix = np.matrix([[stable_number_autism_nonzero_editing_and_min_coverage[i], stable_number_autism_with_at_least_min_coverage[i]-stable_number_autism_nonzero_editing_and_min_coverage[i]], [stable_number_normal_nonzero_editing_and_min_coverage[i], stable_number_normal_with_at_least_min_coverage[i]-stable_number_normal_nonzero_editing_and_min_coverage[i]]])
+  stable_frequency_OR[i], stable_frequency_fishers_p_value[i] = fisher_exact(fisher_matrix)  
+  #print stable_frequency_OR[i]
+  #print stable_frequency_fishers_p_value[i]
+  stable_prevalence_effect_size[i] = np.absolute(stable_autism_prevalence[i] - stable_normal_prevalence[i])
 
+#now put everything back together as a table
+header_info = editing_table[['chromosome','position','type_editing']]
+stats_table = pd.DataFrame(coverage_threshold_used)
+stats_table = stats_table.rename(columns={stats_table.columns[0]: 'coverage_threshold_used'})
+stats_table['stability_based_on'] = pd.DataFrame(stability_based_on)
+stats_table['stable_mean_autism_editing_level'] = pd.DataFrame(stable_mean_autism_editing_level)
+stats_table['stable_std_dev_autism_editing_level'] = pd.DataFrame(stable_std_dev_autism_editing_level)
+stats_table['stable_mean_normal_editing_level'] = pd.DataFrame(stable_mean_normal_editing_level)
+stats_table['stable_std_dev_normal_editing_level'] = pd.DataFrame(stable_std_dev_normal_editing_level)
+stats_table['stable_number_autism_with_at_least_min_coverage'] = pd.DataFrame(stable_number_autism_with_at_least_min_coverage)
+stats_table['stable_number_autism_nonzero_editing_and_min_coverage'] = pd.DataFrame(stable_number_autism_nonzero_editing_and_min_coverage)
+stats_table['stable_autism_prevalence'] = pd.DataFrame(stable_autism_prevalence)
+stats_table['stable_number_normal_with_at_least_min_coverage'] = pd.DataFrame(stable_number_normal_with_at_least_min_coverage)
+stats_table['stable_number_normal_nonzero_editing_and_min_coverage'] = pd.DataFrame(stable_number_normal_nonzero_editing_and_min_coverage)
+stats_table['stable_normal_prevalence'] = pd.DataFrame(stable_normal_prevalence)
+stats_table['stable_total_number_individuals_nonzero_editing_and_min_coverage'] = pd.DataFrame(stable_total_number_individuals_nonzero_editing_and_min_coverage)
+stats_table['stable_mann_whitney_p_value'] = pd.DataFrame(stable_mann_whitney_p_value)
+stats_table['stable_editing_level_effect_size'] = pd.DataFrame(stable_editing_level_effect_size)
+stats_table['stable_frequency_fishers_p_value'] = pd.DataFrame(stable_frequency_fishers_p_value)
+stats_table['stable_frequency_OR'] = pd.DataFrame(stable_frequency_OR)
+stats_table['stable_prevalence_effect_size'] = pd.DataFrame(stable_prevalence_effect_size)
 
+full_table = pd.concat([header_info, stats_table, editing_table[all_people]], axis=1)
 
+#write the full_table to output
+full_table.to_csv(output_file, sep='\t')
 
-
-
+print "job completed\n"
 
